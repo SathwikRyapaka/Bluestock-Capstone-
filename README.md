@@ -56,10 +56,20 @@ Bluestock-Capstone/
 ├── live_nav_fetch.py         # Live NAV ingestion pipeline from mfapi.in REST API
 ├── data_cleaning.py          # Data cleaning and transformation pipeline
 ├── load_to_sqlite.py         # Star schema database loader with SQLAlchemy
+├── generate_eda_charts.py    # Exploratory data analysis 16-chart generator
+├── generate_advanced_analytics.py # Advanced analytics & risk metrics generator
+├── recommender.py            # Quantitative fund recommendation engine
 ├── bluestock_mf.db           # SQLite Relational Database (Star Schema)
 ├── schema.sql                # Star schema DDL definition
 ├── queries.sql               # 10 business analytical SQL queries with results
 ├── data_dictionary.md        # Comprehensive data dictionary for all tables
+├── EDA_Analysis.ipynb        # Exploratory Data Analysis notebook (16+ charts)
+├── Advanced_Analytics.ipynb  # Advanced analytics notebook with 5 insights
+├── var_cvar_report.csv       # Historical VaR (95%) and CVaR for all 40 schemes
+├── rolling_sharpe_chart.png  # 90-day rolling Sharpe ratio visualization
+├── cohort_analysis.csv       # Investor vintage cohort metrics
+├── sip_continuity.csv        # SIP gap and churn risk analytics
+├── sector_hhi.csv            # Sector concentration HHI scores
 ├── requirements.txt          # Project dependencies
 ├── .gitignore                # Git ignore rules
 └── README.md                 # Project documentation
@@ -85,28 +95,56 @@ Bluestock-Capstone/
   - **`scheme_performance`:** Ensured all 11 return and risk metrics are numeric, verified `expense_ratio_pct` within 0.1%–2.5%, flagged anomalies (e.g., Liquid funds with high Sharpe due to low volatility). Produced `clean_performance.csv` (40 schemes).
   - **All Remaining Datasets Cleaned:** Exported all 10 datasets into [`data/processed/`](data/processed/).
 - **2. Relational Star Schema ([`schema.sql`](schema.sql)):**
-  - Designed normalized dimensional model with explicit primary and foreign keys:
-    - **Dimensions:** `dim_fund`, `dim_date` (2,557 days with calendar & Indian fiscal year attributes).
-    - **Core Facts:** `fact_nav` (46,000 rows), `fact_transactions` (32,778 rows), `fact_performance` (40 rows), `fact_aum` (90 rows).
-    - **Supporting Facts:** `fact_monthly_sip`, `fact_category_inflows`, `fact_industry_folios`, `fact_portfolio_holdings`, `fact_benchmark_indices`.
-    - Performance optimization indexes created for analytical speed.
+  - Designed normalized dimensional model with explicit primary and foreign keys (`dim_fund`, `dim_date`, `fact_nav`, `fact_transactions`, `fact_performance`, `fact_aum`, plus supporting facts).
 - **3. Automated SQLite Loader ([`load_to_sqlite.py`](load_to_sqlite.py)):**
-  - Loaded all datasets into `bluestock_mf.db` using SQLAlchemy `create_engine()` + `df.to_sql()`.
-  - Confirmed **100% exact row count match** between source CSVs and database tables.
+  - Loaded all datasets into `bluestock_mf.db` with 100% exact row count match.
 - **4. Analytical SQL Queries ([`queries.sql`](queries.sql)):**
-  - Authored and verified 10 core analytical queries with business context:
-    1. Top 5 Funds by AUM
-    2. Average NAV per Month Across Industry
-    3. Monthly SIP Inflow YoY Growth
-    4. Investor Transactions & Volume Breakdown by Indian State
-    5. Funds with Expense Ratio < 1.0%
-    6. Top 5 Schemes by Risk-Adjusted Sharpe Ratio
-    7. Geographic Inclusivity: T30 vs B30 Demographics & Ticket Sizes
-    8. AMC Market Share & AUM Leadership (Dec 2025 Snapshot)
-    9. Portfolio Sector Allocation & Market Capitalization Concentration
-    10. Cash Inflow Dynamics: Systematic vs Discretionary vs Redemptions
+  - Authored and verified 10 core analytical queries with business context.
 - **5. Comprehensive Data Dictionary ([`data_dictionary.md`](data_dictionary.md)):**
-  - Documented entity relationships (Mermaid diagram), data types, constraints, business definitions, and official data sources for every column.
+  - Documented entity relationships (Mermaid diagram), data types, constraints, and business definitions.
+
+---
+
+### Day 3: Exploratory Data Analysis (EDA)
+- **1. Publication-Quality Chart Engine ([`generate_eda_charts.py`](generate_eda_charts.py)):**
+  - Generated **16 high-resolution analytical figures** exported to [`reports/figures/`](reports/figures/):
+    1. `01_nav_trend_all_schemes.png`: Daily NAV trajectories (40 schemes) highlighting the 2023 Bull Run and 2024 Market Volatility.
+    2. `02_nav_category_performance.png`: Small Cap (+118.4%), Mid Cap (+92.1%), Large Cap (+54.2%), and Liquid category comparisons.
+    3. `03_aum_growth_by_amc.png`: Grouped AUM bar chart highlighting SBI Mutual Fund's ₹12.50L Crore market leadership.
+    4. `04_amc_market_share_pie.png`: AMC market footprint distribution (SBI 19.92%, ICICI Pru 17.12%, HDFC 14.82%).
+    5. `05_monthly_sip_inflows_trend.png`: Monthly SIP inflow time series annotating the ₹31,002 Crore all-time high (Dec 2025).
+    6. `06_sip_yoy_growth_trend.png`: Annualized SIP velocity sustaining positive YoY growth across all months (avg +27.6%).
+    7. `07_category_inflow_heatmap.png`: High-density Seaborn heatmap tracking capital rotation into Mid/Small/Flexi Cap.
+    8. `08_investor_age_distribution.png`: Retail age demographic breakdown (millennial age 26–35 dominance at 35.4%).
+    9. `09_sip_amount_by_age_boxplot.png`: SIP installment ticket size boxplot across age brackets (peak median ₹12,450 for age 36–45).
+    10. `10_investor_gender_income_split.png`: Investor gender split and income distribution.
+    11. `11_geographic_sip_inflows_state.png`: Capital inflow bar chart across 12 Indian states (Punjab, Tamil Nadu, MP leading).
+    12. `12_city_tier_t30_b30_split.png`: T30 (₹231.9 Cr) vs B30 (₹120.2 Cr) capital allocation comparison.
+    13. `13_industry_folio_growth.png`: Industry folio count doubling from 13.26 Cr to 26.12 Cr accounts.
+    14. `14_nav_return_correlation_matrix.png`: Pairwise Pearson return correlation matrix across 10 diverse schemes.
+    15. `15_sector_allocation_donut.png`: Portfolio concentration across sectors (Banking 23.2%, IT 14.2%, Pharma 12.8%).
+    16. `16_top_equity_stock_holdings.png`: Top 10 underlying stock allocations by portfolio market value.
+- **2. Interactive EDA Notebook ([`EDA_Analysis.ipynb`](EDA_Analysis.ipynb)):**
+  - Fully self-contained notebook featuring code, Plotly interactive visualizations, and **10 structured EDA business findings**.
+
+---
+
+### Advanced Analytics + Risk Metrics (Day 6)
+- **1. Historical VaR (95%) & Conditional VaR (Expected Shortfall):**
+  - Computed for all 40 schemes. Documented tail loss severity in [`var_cvar_report.csv`](var_cvar_report.csv). Small Cap schemes show highest downside exposure (VaR: -2.69%, CVaR: -3.24%).
+- **2. Dynamic Rolling 90-Day Sharpe Ratio:**
+  - Evaluated rolling Sharpe trends over 1,061 rolling windows for 5 key schemes (SBI Bluechip, ICICI Bluechip, Nippon Large Cap, Axis Bluechip, Kotak Bluechip).
+  - Visualized and exported to [`rolling_sharpe_chart.png`](rolling_sharpe_chart.png).
+- **3. Investor Cohort Analysis ([`cohort_analysis.csv`](cohort_analysis.csv)):**
+  - Grouped investors by first transaction year (2024 vs 2025). 2024 cohort accounts for ₹349.11 Cr across 4,803 investors; 2025 cohort demonstrates higher average SIP size (₹13,505).
+- **4. SIP Continuity & Churn Risk ([`sip_continuity.csv`](sip_continuity.csv)):**
+  - Tracked installment gap intervals for 1,362 investors with 6+ SIPs. Flagged 1,332 investors with average gap > 35 days as "At-Risk".
+- **5. Simple Fund Recommender ([`recommender.py`](recommender.py)):**
+  - Interactive and CLI tool recommending top 3 funds by Sharpe ratio within matching risk categories (`Low`, `Moderate`, `High`).
+- **6. Sector HHI Concentration ([`sector_hhi.csv`](sector_hhi.csv)):**
+  - Computed Herfindahl-Hirschman Index across 34 equity funds. Axis Bluechip has the highest HHI (2,967.69) due to a 48.7% IT weighting.
+- **7. Advanced Analytics Notebook ([`Advanced_Analytics.ipynb`](Advanced_Analytics.ipynb)):**
+  - Contains complete code, interactive plots, and 5 detailed business insights.
 
 ---
 
