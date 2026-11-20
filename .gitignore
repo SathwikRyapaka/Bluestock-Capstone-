@@ -33,6 +33,7 @@ venv.bak/
 # Database files (>100MB as specified in capstone rules)
 *.db
 *.sqlite3
+!bluestock_mf.db
 
 # OS generated files
 .DS_Store
