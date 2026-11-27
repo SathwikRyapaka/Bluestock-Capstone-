@@ -1,0 +1,2 @@
+# Bluestock Mutual Fund ETL: Auto-fetch live NAVs from mfapi.in every weekday at 8:00 PM
+0 20 * * 1-5 cd "F:\Bluestock Capstone" && "C:\Users\Administrator\AppData\Local\Programs\Python\Python38\python.exe" live_nav_fetch.py && "C:\Users\Administrator\AppData\Local\Programs\Python\Python38\python.exe" run_pipeline.py --skip-live-api >> reports/cron_etl.log 2>&1

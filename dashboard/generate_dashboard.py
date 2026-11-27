@@ -1,15 +1,15 @@
 """
-Interactive BI Dashboard Generator
+Interactive 4-Page BI Dashboard Generator
 Bluestock Fintech Capstone Project
 
 Generates:
-1. dashboard/bluestock_dashboard.html — Self-contained interactive HTML5/Plotly
-   executive dashboard with 4 tabs (Executive Overview, NAV & Returns,
-   Investor & Geography, Risk & Recommender).
-2. reports/figures/dashboard_overview.png — High-resolution dashboard screenshot 1
-   (Executive KPIs, AUM Leadership, SIP Growth, Folio Expansion).
-3. reports/figures/dashboard_analytics.png — High-resolution dashboard screenshot 2
-   (Risk VaR/CVaR Matrix, Rolling Sharpe, Sector HHI, Top Recommendations).
+1. dashboard/bluestock_dashboard.html — Self-contained 4-page interactive HTML5/Plotly
+   dashboard with 2+ interactive filter slicers on every page:
+   - Page 1: Executive & AUM Overview (Year + Fund House slicers)
+   - Page 2: Scheme Performance & Alpha (Category + Risk Grade slicers)
+   - Page 3: Investor Demographics & Geography (City Tier + Transaction Type slicers)
+   - Page 4: Risk Analytics & Fund Recommender (Risk Appetite + Sub-Category slicers)
+2. reports/figures/dashboard_overview.png & dashboard_analytics.png
 """
 
 import json
@@ -21,14 +21,10 @@ from typing import Dict, Any
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import numpy as np
 import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -43,13 +39,11 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 def fetch_dashboard_data() -> Dict[str, Any]:
     """Queries SQLite star schema and analytics CSVs for dashboard metrics."""
     conn = sqlite3.connect(DB_PATH)
-
-    df_fund = pd.read_sql_query("SELECT * FROM dim_fund", conn)
     df_perf = pd.read_sql_query(
         """
         SELECT p.amfi_code, p.scheme_name, p.fund_house, p.category, f.sub_category,
                p.risk_grade, p.sharpe_ratio, p.return_3yr_pct, p.std_dev_ann_pct,
-               p.expense_ratio_pct, p.aum_crore
+               p.expense_ratio_pct, p.aum_crore, p.alpha
         FROM fact_performance p
         JOIN dim_fund f ON p.amfi_code = f.amfi_code
         ORDER BY p.sharpe_ratio DESC
@@ -82,12 +76,10 @@ def fetch_dashboard_data() -> Dict[str, Any]:
 
     var_path = BASE_DIR / "var_cvar_report.csv"
     df_var = pd.read_csv(var_path) if var_path.exists() else pd.DataFrame()
-
     hhi_path = BASE_DIR / "sector_hhi.csv"
     df_hhi = pd.read_csv(hhi_path) if hhi_path.exists() else pd.DataFrame()
 
     return {
-        "fund": df_fund,
         "perf": df_perf,
         "aum": df_aum,
         "sip": df_sip,
@@ -100,7 +92,7 @@ def fetch_dashboard_data() -> Dict[str, Any]:
 
 
 def generate_html_dashboard(data: Dict[str, Any]) -> Path:
-    """Builds a self-contained interactive HTML5/Plotly dashboard."""
+    """Builds a 4-page interactive HTML5/Plotly dashboard with 2+ slicers per page."""
     df_aum = data["aum"]
     df_sip = data["sip"]
     df_folio = data["folio"]
@@ -109,414 +101,279 @@ def generate_html_dashboard(data: Dict[str, Any]) -> Path:
     df_holdings = data["holdings"]
     df_var = data["var"]
 
-    latest_year = int(df_aum["year"].max())
-    latest_date = df_aum[df_aum["year"] == latest_year]["date"].max()
-    aum_latest = df_aum[df_aum["date"] == latest_date].sort_values("aum_lakh_crore", ascending=False)
-    total_industry_aum = round(float(aum_latest["aum_lakh_crore"].sum()), 2)
-    latest_sip = round(float(df_sip["sip_inflow_crore"].iloc[-1]), 0)
-    latest_folios = round(float(df_folio["total_folios_crore"].iloc[-1]), 2)
-    total_tx_cr = round(float(df_tx["total_inr"].sum() / 1e7), 2)
+    aum_records = df_aum[["year", "date", "fund_house", "aum_lakh_crore"]].to_dict(orient="records")
+    sip_records = df_sip[["month", "sip_inflow_crore", "active_sip_accounts_crore"]].to_dict(orient="records")
+    folio_records = df_folio[["month", "total_folios_crore", "equity_folios_crore"]].to_dict(orient="records")
+    perf_records = df_perf[[
+        "scheme_name", "fund_house", "category", "sub_category", "risk_grade",
+        "sharpe_ratio", "return_3yr_pct", "std_dev_ann_pct", "expense_ratio_pct", "aum_crore", "alpha"
+    ]].to_dict(orient="records")
+    tx_records = df_tx.to_dict(orient="records")
+    holdings_records = df_holdings.head(8).to_dict(orient="records")
+    var_records = (
+        df_var[["scheme_name", "sub_category", "risk_category", "var_95_daily_pct", "cvar_95_daily_pct"]]
+        .to_dict(orient="records") if not df_var.empty else []
+    )
 
-    state_agg = df_tx.groupby("state")["total_inr"].sum().sort_values(ascending=False).head(10)
-    tier_agg = df_tx.groupby("city_tier")["total_inr"].sum()
+    years = sorted(df_aum["year"].unique().tolist(), reverse=True)
+    amcs = sorted(df_aum["fund_house"].unique().tolist())
+    cats = sorted(df_perf["category"].unique().tolist())
+    risks = sorted(df_perf["risk_grade"].unique().tolist())
+    sub_cats = sorted(df_perf["sub_category"].unique().tolist())
 
-    # Prepare JSON payloads for Plotly.js
-    amc_names = aum_latest["fund_house"].tolist()
-    amc_vals = [round(float(x), 2) for x in aum_latest["aum_lakh_crore"].tolist()]
-
-    sip_dates = df_sip["month"].tolist()
-    sip_vals = [round(float(x), 1) for x in df_sip["sip_inflow_crore"].tolist()]
-
-    folio_dates = df_folio["month"].tolist()
-    folio_vals = [round(float(x), 2) for x in df_folio["total_folios_crore"].tolist()]
-
-    top_sectors = df_holdings.head(8)
-    sector_labels = top_sectors["sector"].tolist()
-    sector_vals = [round(float(x), 2) for x in top_sectors["total_weight"].tolist()]
-
-    state_labels = state_agg.index.tolist()
-    state_vals = [round(float(x / 1e7), 2) for x in state_agg.values]
-
-    tier_labels = tier_agg.index.tolist()
-    tier_vals = [round(float(x / 1e7), 2) for x in tier_agg.values]
-
-    if not df_var.empty:
-        var_sample = df_var.head(15)
-        var_names = [s[:28] for s in var_sample["scheme_name"].tolist()]
-        var_vals = [round(float(x), 2) for x in var_sample["var_95_daily_pct"].tolist()]
-        cvar_vals = [round(float(x), 2) for x in var_sample["cvar_95_daily_pct"].tolist()]
-    else:
-        var_names, var_vals, cvar_vals = [], [], []
-
-    # Top 10 schemes table rows
-    top_schemes_rows = ""
-    for _, row in df_perf.head(10).iterrows():
-        top_schemes_rows += (
-            f"<tr>"
-            f"<td>{row['scheme_name']}</td>"
-            f"<td>{row['fund_house']}</td>"
-            f"<td>{row['sub_category']}</td>"
-            f"<td>{row['risk_grade']}</td>"
-            f"<td><b>{row['sharpe_ratio']:.2f}</b></td>"
-            f"<td>{row['return_3yr_pct']:.2f}%</td>"
-            f"<td>{row['expense_ratio_pct']:.2f}%</td>"
-            f"<td>&#8377;{row['aum_crore']:,.0f} Cr</td>"
-            f"</tr>\n"
-        )
-
-    html_content = f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bluestock Fintech — Mutual Fund Analytics Dashboard</title>
+  <title>Bluestock Fintech — 4-Page Mutual Fund BI Dashboard</title>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
   <style>
-    :root {{
-      --bg: #0f172a;
-      --card: #1e293b;
-      --border: #334155;
-      --text: #f8fafc;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --green: #10b981;
-      --amber: #f59e0b;
-      --rose: #f43f5e;
-    }}
-    * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; }}
-    body {{ background: var(--bg); color: var(--text); padding: 20px 28px; }}
-    header {{
-      display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px;
-    }}
-    header h1 {{ font-size: 22px; color: var(--accent); }}
-    header p {{ font-size: 13px; color: var(--muted); }}
-    .kpi-grid {{
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 22px;
-    }}
-    .kpi-card {{
-      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px;
-    }}
-    .kpi-label {{ font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }}
-    .kpi-value {{ font-size: 26px; font-weight: 700; margin-top: 6px; color: var(--text); }}
-    .kpi-sub {{ font-size: 12px; color: var(--green); margin-top: 4px; }}
-    .chart-grid {{
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-bottom: 22px;
-    }}
-    .chart-card {{
-      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
-    }}
-    .chart-card h3 {{ font-size: 15px; margin-bottom: 10px; color: #e2e8f0; }}
-    .table-card {{
-      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; overflow-x: auto;
-    }}
-    .table-card h3 {{ font-size: 16px; margin-bottom: 12px; color: var(--accent); }}
-    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
-    th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }}
-    th {{ color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; }}
-    tr:hover {{ background: rgba(56, 189, 248, 0.08); }}
-    footer {{ text-align: center; margin-top: 24px; font-size: 12px; color: var(--muted); }}
+    :root {{ --bg:#0f172a; --card:#1e293b; --border:#334155; --text:#f8fafc; --muted:#94a3b8; --accent:#38bdf8; --green:#10b981; }}
+    * {{ box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',Roboto,sans-serif; }}
+    body {{ background:var(--bg); color:var(--text); padding:18px 26px; }}
+    header {{ display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px; }}
+    header h1 {{ font-size:21px; color:var(--accent); }}
+    header p {{ font-size:12px; color:var(--muted); }}
+    .nav-tabs {{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; }}
+    .tab-btn {{ background:var(--card); color:var(--muted); border:1px solid var(--border); padding:9px 16px; border-radius:8px; cursor:pointer; font-weight:600; font-size:13px; }}
+    .tab-btn.active {{ background:#0284c7; color:#fff; border-color:#38bdf8; }}
+    .page {{ display:none; }}
+    .page.active {{ display:block; }}
+    .slicer-bar {{ display:flex; gap:16px; background:var(--card); border:1px solid var(--border); padding:12px 16px; border-radius:10px; margin-bottom:18px; flex-wrap:wrap; align-items:center; }}
+    .slicer-group {{ display:flex; flex-direction:column; gap:4px; }}
+    .slicer-group label {{ font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:600; }}
+    select {{ background:#0f172a; color:var(--text); border:1px solid var(--border); padding:6px 10px; border-radius:6px; font-size:13px; min-width:180px; }}
+    .kpi-grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }}
+    .kpi-card {{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 18px; }}
+    .kpi-label {{ font-size:11px; color:var(--muted); text-transform:uppercase; }}
+    .kpi-value {{ font-size:24px; font-weight:700; margin-top:4px; color:var(--accent); }}
+    .chart-grid {{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-bottom:18px; }}
+    .chart-card {{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; }}
+    .chart-card h3 {{ font-size:14px; margin-bottom:8px; color:#e2e8f0; }}
+    table {{ width:100%; border-collapse:collapse; font-size:12.5px; background:var(--card); border-radius:8px; overflow:hidden; }}
+    th, td {{ text-align:left; padding:9px 11px; border-bottom:1px solid var(--border); }}
+    th {{ color:var(--muted); font-size:11px; text-transform:uppercase; }}
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>Bluestock Fintech — Mutual Fund Analytics Platform</h1>
-      <p>Interactive Star-Schema BI Dashboard | 40 Schemes | 46,000 NAV Records | 32,778 Transactions</p>
+      <h1>Bluestock Fintech — Interactive Mutual Fund BI Dashboard</h1>
+      <p>4-Page Star-Schema Analytics with Dynamic Slicers | 40 Schemes | 46,000 NAV Rows | 32,778 Transactions</p>
     </div>
-    <div style="text-align:right">
-      <span style="background:#0ea5e9;color:#fff;padding:5px 12px;border-radius:14px;font-size:12px;font-weight:600;">v1.0 Production</span>
-    </div>
+    <span style="background:#0ea5e9;color:#fff;padding:5px 12px;border-radius:14px;font-size:12px;font-weight:600;">v1.0 Interactive</span>
   </header>
 
-  <section class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Industry AUM ({latest_year})</div>
-      <div class="kpi-value">&#8377;{total_industry_aum:.2f}L Cr</div>
-      <div class="kpi-sub">SBI MF leads at &#8377;12.50L Cr (19.9%)</div>
+  <nav class="nav-tabs">
+    <button class="tab-btn active" onclick="showPage('p1', this)">Page 1: Executive &amp; AUM</button>
+    <button class="tab-btn" onclick="showPage('p2', this)">Page 2: Scheme Performance</button>
+    <button class="tab-btn" onclick="showPage('p3', this)">Page 3: Investor &amp; Geography</button>
+    <button class="tab-btn" onclick="showPage('p4', this)">Page 4: Risk &amp; Recommender</button>
+  </nav>
+
+  <!-- PAGE 1 -->
+  <section id="p1" class="page active">
+    <div class="slicer-bar">
+      <div class="slicer-group">
+        <label>Slicer 1: Calendar Year</label>
+        <select id="p1-year" onchange="renderP1()">
+          {"".join(f'<option value="{y}">{y}</option>' for y in years)}
+        </select>
+      </div>
+      <div class="slicer-group">
+        <label>Slicer 2: Fund House (AMC)</label>
+        <select id="p1-amc" onchange="renderP1()">
+          <option value="ALL">All Fund Houses</option>
+          {"".join(f'<option value="{a}">{a}</option>' for a in amcs)}
+        </select>
+      </div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Latest Monthly SIP Inflow</div>
-      <div class="kpi-value">&#8377;{latest_sip:,.0f} Cr</div>
-      <div class="kpi-sub">+169% growth since Jan 2022</div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Filtered AUM</div><div id="p1-kpi-aum" class="kpi-value">-</div></div>
+      <div class="kpi-card"><div class="kpi-label">Peak Monthly SIP</div><div class="kpi-value">&#8377;31,002 Cr</div></div>
+      <div class="kpi-card"><div class="kpi-label">Total Folios (Dec 25)</div><div class="kpi-value">26.12 Cr</div></div>
+      <div class="kpi-card"><div class="kpi-label">Active Schemes</div><div class="kpi-value">40</div></div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Total Industry Folios</div>
-      <div class="kpi-value">{latest_folios:.2f} Cr</div>
-      <div class="kpi-sub">Nearly doubled from 13.26 Cr</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Tracked Retail Volume</div>
-      <div class="kpi-value">&#8377;{total_tx_cr:,.1f} Cr</div>
-      <div class="kpi-sub">32,778 verified transactions</div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>AMC AUM Leadership (&#8377; Lakh Cr)</h3><div id="c-p1-aum" style="height:310px;"></div></div>
+      <div class="chart-card"><h3>Monthly SIP Inflows (&#8377; Cr)</h3><div id="c-p1-sip" style="height:310px;"></div></div>
     </div>
   </section>
 
-  <section class="chart-grid">
-    <div class="chart-card">
-      <h3>AMC AUM Leadership ({latest_year}, &#8377; Lakh Crore)</h3>
-      <div id="chart-aum" style="height:310px;"></div>
+  <!-- PAGE 2 -->
+  <section id="p2" class="page">
+    <div class="slicer-bar">
+      <div class="slicer-group">
+        <label>Slicer 1: Category</label>
+        <select id="p2-cat" onchange="renderP2()">
+          <option value="ALL">All Categories</option>
+          {"".join(f'<option value="{c}">{c}</option>' for c in cats)}
+        </select>
+      </div>
+      <div class="slicer-group">
+        <label>Slicer 2: Risk Grade</label>
+        <select id="p2-risk" onchange="renderP2()">
+          <option value="ALL">All Risk Grades</option>
+          {"".join(f'<option value="{r}">{r}</option>' for r in risks)}
+        </select>
+      </div>
     </div>
-    <div class="chart-card">
-      <h3>Monthly SIP Inflow Trajectory (&#8377; Crore)</h3>
-      <div id="chart-sip" style="height:310px;"></div>
-    </div>
-    <div class="chart-card">
-      <h3>Top 10 States by Retail Volume (&#8377; Crore)</h3>
-      <div id="chart-state" style="height:310px;"></div>
-    </div>
-    <div class="chart-card">
-      <h3>Equity Sector Allocation (%)</h3>
-      <div id="chart-sector" style="height:310px;"></div>
-    </div>
-    <div class="chart-card">
-      <h3>Industry Folio Growth (Crore Accounts)</h3>
-      <div id="chart-folio" style="height:310px;"></div>
-    </div>
-    <div class="chart-card">
-      <h3>Tail Risk: 95% Historical VaR vs CVaR (%)</h3>
-      <div id="chart-var" style="height:310px;"></div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Risk-Return Frontier (Volatility vs 3Y Return)</h3><div id="c-p2-scatter" style="height:320px;"></div></div>
+      <div class="chart-card"><h3>Top Filtered Schemes by Sharpe Ratio</h3><div id="c-p2-sharpe" style="height:320px;"></div></div>
     </div>
   </section>
 
-  <section class="table-card">
-    <h3>Top 10 Schemes by Risk-Adjusted Return (Sharpe Ratio)</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>Scheme Name</th><th>Fund House</th><th>Category</th><th>Risk Grade</th>
-          <th>Sharpe</th><th>3Y Return</th><th>Expense Ratio</th><th>AUM</th>
-        </tr>
-      </thead>
-      <tbody>
-        {top_schemes_rows}
-      </tbody>
-    </table>
+  <!-- PAGE 3 -->
+  <section id="p3" class="page">
+    <div class="slicer-bar">
+      <div class="slicer-group">
+        <label>Slicer 1: City Tier</label>
+        <select id="p3-tier" onchange="renderP3()">
+          <option value="ALL">All City Tiers (T30 + B30)</option>
+          <option value="T30">T30 Metros</option>
+          <option value="B30">B30 Cities</option>
+        </select>
+      </div>
+      <div class="slicer-group">
+        <label>Slicer 2: Transaction Type</label>
+        <select id="p3-type" onchange="renderP3()">
+          <option value="ALL">All Types</option>
+          <option value="SIP">SIP</option>
+          <option value="Lumpsum">Lumpsum</option>
+          <option value="Redemption">Redemption</option>
+        </select>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Top 10 States by Investment Volume (&#8377; Cr)</h3><div id="c-p3-state" style="height:320px;"></div></div>
+      <div class="chart-card"><h3>Investor Volume by Age Group (&#8377; Cr)</h3><div id="c-p3-age" style="height:320px;"></div></div>
+    </div>
   </section>
 
-  <footer>
-    Bluestock Fintech Capstone Project (2026) | Team: Sathwik Ryapaka, Abhiram, Ashmeet Kaur
-  </footer>
+  <!-- PAGE 4 -->
+  <section id="p4" class="page">
+    <div class="slicer-bar">
+      <div class="slicer-group">
+        <label>Slicer 1: Risk Appetite (Recommender)</label>
+        <select id="p4-risk" onchange="renderP4()">
+          <option value="ALL">All Risk Profiles</option>
+          <option value="Low">Low (Capital Preservation)</option>
+          <option value="Moderate">Moderate (Balanced)</option>
+          <option value="High">High / Very High (Aggressive)</option>
+        </select>
+      </div>
+      <div class="slicer-group">
+        <label>Slicer 2: Sub-Category</label>
+        <select id="p4-sub" onchange="renderP4()">
+          <option value="ALL">All Sub-Categories</option>
+          {"".join(f'<option value="{s}">{s}</option>' for s in sub_cats)}
+        </select>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>95% Historical VaR &amp; CVaR Tail Risk (%)</h3><div id="c-p4-var" style="height:300px;"></div></div>
+      <div class="chart-card"><h3>Equity Sector Allocation (%)</h3><div id="c-p4-sec" style="height:300px;"></div></div>
+    </div>
+    <div class="chart-card">
+      <h3>Recommended Schemes (Ranked by Sharpe Ratio)</h3>
+      <table id="p4-table"><thead><tr><th>Scheme</th><th>AMC</th><th>Sub-Category</th><th>Risk</th><th>Sharpe</th><th>3Y Return</th><th>Expense</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
 
   <script>
-    const darkLayout = {{
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      font: {{ color: '#cbd5e1', size: 11 }},
-      margin: {{ t: 15, r: 20, b: 45, l: 55 }},
-      xaxis: {{ gridcolor: '#334155' }},
-      yaxis: {{ gridcolor: '#334155' }}
-    }};
+    const AUM = {json.dumps(aum_records)};
+    const SIP = {json.dumps(sip_records)};
+    const PERF = {json.dumps(perf_records)};
+    const TX = {json.dumps(tx_records)};
+    const HOLDINGS = {json.dumps(holdings_records)};
+    const VAR_DATA = {json.dumps(var_records)};
 
-    Plotly.newPlot('chart-aum', [{{
-      x: {json.dumps(amc_names)},
-      y: {json.dumps(amc_vals)},
-      type: 'bar',
-      marker: {{ color: '#38bdf8' }}
-    }}], {{ ...darkLayout, xaxis: {{ ...darkLayout.xaxis, tickangle: -25 }} }}, {{ responsive: true }});
+    const L = {{ paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{{color:'#cbd5e1',size:11}}, margin:{{t:15,r:20,b:50,l:55}}, xaxis:{{gridcolor:'#334155'}}, yaxis:{{gridcolor:'#334155'}} }};
 
-    Plotly.newPlot('chart-sip', [{{
-      x: {json.dumps(sip_dates)},
-      y: {json.dumps(sip_vals)},
-      type: 'scatter', mode: 'lines', fill: 'tozeroy',
-      line: {{ color: '#10b981', width: 2.5 }}
-    }}], darkLayout, {{ responsive: true }});
+    function showPage(id, btn) {{
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      btn.classList.add('active');
+      renderP1(); renderP2(); renderP3(); renderP4();
+    }}
 
-    Plotly.newPlot('chart-state', [{{
-      y: {json.dumps(state_labels[::-1])},
-      x: {json.dumps(state_vals[::-1])},
-      type: 'bar', orientation: 'h',
-      marker: {{ color: '#f59e0b' }}
-    }}], {{ ...darkLayout, margin: {{ t: 15, r: 20, b: 40, l: 110 }} }}, {{ responsive: true }});
+    function renderP1() {{
+      const yr = parseInt(document.getElementById('p1-year').value);
+      const amc = document.getElementById('p1-amc').value;
+      let sub = AUM.filter(r => r.year === yr);
+      const maxDt = sub.reduce((m, r) => r.date > m ? r.date : m, '');
+      sub = sub.filter(r => r.date === maxDt);
+      if (amc !== 'ALL') sub = sub.filter(r => r.fund_house === amc);
+      const totAum = sub.reduce((s, r) => s + r.aum_lakh_crore, 0);
+      document.getElementById('p1-kpi-aum').innerText = '₹' + totAum.toFixed(2) + 'L Cr';
+      Plotly.newPlot('c-p1-aum', [{{ x: sub.map(r=>r.fund_house), y: sub.map(r=>r.aum_lakh_crore), type:'bar', marker:{{color:'#38bdf8'}} }}], L, {{responsive:true}});
+      Plotly.newPlot('c-p1-sip', [{{ x: SIP.map(r=>r.month), y: SIP.map(r=>r.sip_inflow_crore), type:'scatter', mode:'lines', fill:'tozeroy', line:{{color:'#10b981'}} }}], L, {{responsive:true}});
+    }}
 
-    Plotly.newPlot('chart-sector', [{{
-      labels: {json.dumps(sector_labels)},
-      values: {json.dumps(sector_vals)},
-      type: 'pie', hole: 0.45
-    }}], {{ ...darkLayout, margin: {{ t: 10, r: 10, b: 10, l: 10 }} }}, {{ responsive: true }});
+    function renderP2() {{
+      const cat = document.getElementById('p2-cat').value;
+      const risk = document.getElementById('p2-risk').value;
+      let sub = PERF.filter(r => (cat==='ALL' || r.category===cat) && (risk==='ALL' || r.risk_grade===risk));
+      Plotly.newPlot('c-p2-scatter', [{{
+        x: sub.map(r=>r.std_dev_ann_pct), y: sub.map(r=>r.return_3yr_pct), text: sub.map(r=>r.scheme_name),
+        mode:'markers', type:'scatter', marker:{{ size:11, color: sub.map(r=>r.sharpe_ratio), colorscale:'Viridis', showscale:true }}
+      }}], {{ ...L, xaxis:{{...L.xaxis, title:'Volatility (%)'}}, yaxis:{{...L.yaxis, title:'3Y Return (%)'}} }}, {{responsive:true}});
+      const top = sub.slice(0, 10);
+      Plotly.newPlot('c-p2-sharpe', [{{ x: top.map(r=>r.scheme_name.slice(0,22)), y: top.map(r=>r.sharpe_ratio), type:'bar', marker:{{color:'#a855f7'}} }}], L, {{responsive:true}});
+    }}
 
-    Plotly.newPlot('chart-folio', [{{
-      x: {json.dumps(folio_dates)},
-      y: {json.dumps(folio_vals)},
-      type: 'scatter', mode: 'lines+markers',
-      line: {{ color: '#a855f7', width: 2.5 }}
-    }}], darkLayout, {{ responsive: true }});
+    function renderP3() {{
+      const tier = document.getElementById('p3-tier').value;
+      const ttype = document.getElementById('p3-type').value;
+      let sub = TX.filter(r => (tier==='ALL' || r.city_tier===tier) && (ttype==='ALL' || r.transaction_type===ttype));
+      const byState = {{}}; const byAge = {{}};
+      sub.forEach(r => {{
+        byState[r.state] = (byState[r.state]||0) + r.total_inr/1e7;
+        byAge[r.age_group] = (byAge[r.age_group]||0) + r.total_inr/1e7;
+      }});
+      const stEntries = Object.entries(byState).sort((a,b)=>b[1]-a[1]).slice(0,10).reverse();
+      Plotly.newPlot('c-p3-state', [{{ y: stEntries.map(e=>e[0]), x: stEntries.map(e=>e[1]), type:'bar', orientation:'h', marker:{{color:'#f59e0b'}} }}], {{...L, margin:{{t:15,r:20,b:40,l:110}}}}, {{responsive:true}});
+      const agEntries = Object.entries(byAge).sort();
+      Plotly.newPlot('c-p3-age', [{{ x: agEntries.map(e=>e[0]), y: agEntries.map(e=>e[1]), type:'bar', marker:{{color:'#38bdf8'}} }}], L, {{responsive:true}});
+    }}
 
-    Plotly.newPlot('chart-var', [
-      {{ x: {json.dumps(var_names)}, y: {json.dumps(var_vals)}, name: 'VaR (95%)', type: 'bar', marker: {{ color: '#f59e0b' }} }},
-      {{ x: {json.dumps(var_names)}, y: {json.dumps(cvar_vals)}, name: 'CVaR (95%)', type: 'bar', marker: {{ color: '#f43f5e' }} }}
-    ], {{ ...darkLayout, barmode: 'group', xaxis: {{ ...darkLayout.xaxis, tickangle: -35 }} }}, {{ responsive: true }});
+    function renderP4() {{
+      const riskProf = document.getElementById('p4-risk').value;
+      const subCat = document.getElementById('p4-sub').value;
+      const riskMap = {{ 'Low':['Low'], 'Moderate':['Moderate','Moderately High'], 'High':['High','Very High'] }};
+      let vSub = VAR_DATA.filter(r => (subCat==='ALL' || r.sub_category===subCat));
+      if (riskProf !== 'ALL') vSub = vSub.filter(r => riskMap[riskProf].includes(r.risk_category));
+      vSub = vSub.slice(0, 12);
+      Plotly.newPlot('c-p4-var', [
+        {{ x: vSub.map(r=>r.scheme_name.slice(0,18)), y: vSub.map(r=>r.var_95_daily_pct), name:'VaR 95%', type:'bar', marker:{{color:'#f59e0b'}} }},
+        {{ x: vSub.map(r=>r.scheme_name.slice(0,18)), y: vSub.map(r=>r.cvar_95_daily_pct), name:'CVaR 95%', type:'bar', marker:{{color:'#f43f5e'}} }}
+      ], {{ ...L, barmode:'group' }}, {{responsive:true}});
+      Plotly.newPlot('c-p4-sec', [{{ labels: HOLDINGS.map(r=>r.sector), values: HOLDINGS.map(r=>r.total_weight), type:'pie', hole:0.45 }}], {{...L, margin:{{t:10,r:10,b:10,l:10}}}}, {{responsive:true}});
+
+      let pSub = PERF.filter(r => (subCat==='ALL' || r.sub_category===subCat));
+      if (riskProf !== 'ALL') pSub = pSub.filter(r => riskMap[riskProf].includes(r.risk_grade));
+      const tbody = document.querySelector('#p4-table tbody');
+      tbody.innerHTML = pSub.slice(0, 8).map(r => `<tr><td>${{r.scheme_name}}</td><td>${{r.fund_house}}</td><td>${{r.sub_category}}</td><td>${{r.risk_grade}}</td><td><b>${{r.sharpe_ratio.toFixed(2)}}</b></td><td>${{r.return_3yr_pct.toFixed(2)}}%</td><td>${{r.expense_ratio_pct.toFixed(2)}}%</td></tr>`).join('');
+    }}
+
+    renderP1();
   </script>
 </body>
 </html>
 """
     out_path = DASHBOARD_DIR / "bluestock_dashboard.html"
-    out_path.write_text(html_content, encoding="utf-8")
-    logger.info(f"Generated interactive HTML dashboard: {out_path}")
+    out_path.write_text(html, encoding="utf-8")
+    logger.info(f"Generated 4-page interactive HTML dashboard with slicers: {out_path}")
     return out_path
 
 
-def render_dashboard_screenshots(data: Dict[str, Any]) -> None:
-    """Renders two high-resolution executive dashboard screenshot PNGs."""
-    df_aum = data["aum"]
-    df_sip = data["sip"]
-    df_folio = data["folio"]
-    df_perf = data["perf"]
-    df_tx = data["tx"]
-    df_holdings = data["holdings"]
-    df_var = data["var"]
-    df_hhi = data["hhi"]
-
-    latest_year = int(df_aum["year"].max())
-    latest_date = df_aum[df_aum["year"] == latest_year]["date"].max()
-    aum_latest = df_aum[df_aum["date"] == latest_date].sort_values("aum_lakh_crore", ascending=False).head(8)
-    total_industry_aum = float(aum_latest["aum_lakh_crore"].sum())
-    latest_sip = float(df_sip["sip_inflow_crore"].iloc[-1])
-    latest_folios = float(df_folio["total_folios_crore"].iloc[-1])
-    total_tx_cr = float(df_tx["total_inr"].sum() / 1e7)
-
-    # --- Screenshot 1: Executive Overview ---
-    fig = plt.figure(figsize=(16, 9), facecolor="#0f172a")
-    fig.suptitle(
-        "BLUESTOCK FINTECH  |  MUTUAL FUND ANALYTICS DASHBOARD — EXECUTIVE OVERVIEW",
-        fontsize=15, fontweight="bold", color="#38bdf8", y=0.97
-    )
-
-    # KPI Banner
-    kpis = [
-        (f"Industry AUM ({latest_year})", f"Rs. {total_industry_aum:.2f}L Cr", "SBI MF leads at 19.9% share", "#38bdf8"),
-        ("Monthly SIP Inflow (Dec 25)", f"Rs. {latest_sip:,.0f} Cr", "+169% vs Jan 2022 baseline", "#10b981"),
-        ("Industry Folios", f"{latest_folios:.2f} Cr", "Doubled from 13.26 Cr (Jan 22)", "#a855f7"),
-        ("Retail Volume Tracked", f"Rs. {total_tx_cr:,.1f} Cr", "32,778 verified transactions", "#f59e0b"),
-    ]
-    for i, (label, val, sub, col) in enumerate(kpis):
-        ax_k = fig.add_axes([0.04 + i * 0.235, 0.80, 0.215, 0.11], facecolor="#1e293b")
-        ax_k.set_xticks([]); ax_k.set_yticks([])
-        for spine in ax_k.spines.values():
-            spine.set_edgecolor("#334155"); spine.set_linewidth(1.2)
-        ax_k.text(0.08, 0.74, label, fontsize=9.5, color="#94a3b8", fontweight="bold")
-        ax_k.text(0.08, 0.36, val, fontsize=17, color=col, fontweight="bold")
-        ax_k.text(0.08, 0.12, sub, fontsize=8.5, color="#cbd5e1")
-
-    # Panel 1: AMC AUM Bar
-    ax1 = fig.add_axes([0.06, 0.44, 0.41, 0.30], facecolor="#1e293b")
-    bars = ax1.bar(aum_latest["fund_house"].str.replace(" Mutual Fund", "").str.replace(" MF", ""),
-                   aum_latest["aum_lakh_crore"], color="#38bdf8", edgecolor="#0f172a")
-    bars[0].set_color("#10b981")
-    ax1.set_title(f"Top Fund Houses by AUM ({latest_year}, Rs. Lakh Cr)", color="#f8fafc", fontsize=11, pad=8)
-    ax1.tick_params(colors="#cbd5e1", labelsize=8, axis="x", rotation=20)
-    ax1.tick_params(colors="#cbd5e1", labelsize=8, axis="y")
-    ax1.grid(axis="y", color="#334155", linestyle="--", alpha=0.6)
-
-    # Panel 2: Monthly SIP Line
-    ax2 = fig.add_axes([0.55, 0.44, 0.41, 0.30], facecolor="#1e293b")
-    sip_dt = pd.to_datetime(df_sip["month"])
-    ax2.plot(sip_dt, df_sip["sip_inflow_crore"], color="#10b981", linewidth=2.2)
-    ax2.fill_between(sip_dt, df_sip["sip_inflow_crore"], color="#10b981", alpha=0.18)
-    ax2.set_title("Monthly SIP Inflow Trajectory (2022–2025, Rs. Cr)", color="#f8fafc", fontsize=11, pad=8)
-    ax2.tick_params(colors="#cbd5e1", labelsize=8)
-    ax2.grid(color="#334155", linestyle="--", alpha=0.6)
-
-    # Panel 3: Top States Horizontal Bar
-    ax3 = fig.add_axes([0.09, 0.07, 0.38, 0.28], facecolor="#1e293b")
-    state_agg = df_tx.groupby("state")["total_inr"].sum().sort_values(ascending=True).tail(8) / 1e7
-    ax3.barh(state_agg.index, state_agg.values, color="#f59e0b")
-    ax3.set_title("Top 8 States by Retail Investment (Rs. Cr)", color="#f8fafc", fontsize=11, pad=8)
-    ax3.tick_params(colors="#cbd5e1", labelsize=8)
-    ax3.grid(axis="x", color="#334155", linestyle="--", alpha=0.6)
-
-    # Panel 4: Sector Allocation Donut
-    ax4 = fig.add_axes([0.55, 0.06, 0.41, 0.30], facecolor="#1e293b")
-    top_sec = df_holdings.head(6)
-    wedges, texts, autotexts = ax4.pie(
-        top_sec["total_weight"], labels=top_sec["sector"], autopct="%1.1f%%",
-        pctdistance=0.78, wedgeprops=dict(width=0.42, edgecolor="#0f172a"),
-        textprops=dict(color="#e2e8f0", fontsize=8)
-    )
-    ax4.set_title("Equity Portfolio Sector Exposure (%)", color="#f8fafc", fontsize=11, pad=8)
-
-    fig.savefig(FIG_DIR / "dashboard_overview.png", dpi=150, facecolor="#0f172a")
-    plt.close(fig)
-    logger.info("Saved dashboard_overview.png")
-
-    # --- Screenshot 2: Risk & Recommender Analytics ---
-    fig2 = plt.figure(figsize=(16, 9), facecolor="#0f172a")
-    fig2.suptitle(
-        "BLUESTOCK FINTECH  |  RISK ANALYTICS, TAIL LOSS & FUND RECOMMENDER",
-        fontsize=15, fontweight="bold", color="#38bdf8", y=0.97
-    )
-
-    # Panel 1: Top 12 Highest Tail Risk VaR/CVaR
-    ax_v = fig2.add_axes([0.07, 0.54, 0.42, 0.34], facecolor="#1e293b")
-    if not df_var.empty:
-        v_top = df_var.head(10)
-        x_idx = np.arange(len(v_top))
-        ax_v.bar(x_idx - 0.18, v_top["var_95_daily_pct"], width=0.35, label="VaR (95%)", color="#f59e0b")
-        ax_v.bar(x_idx + 0.18, v_top["cvar_95_daily_pct"], width=0.35, label="CVaR (95%)", color="#f43f5e")
-        ax_v.set_xticks(x_idx)
-        ax_v.set_xticklabels([s[:14] for s in v_top["scheme_name"]], rotation=28, ha="right", fontsize=7.5, color="#cbd5e1")
-        ax_v.legend(facecolor="#0f172a", edgecolor="#334155", labelcolor="#f8fafc", fontsize=8)
-    ax_v.set_title("95% Daily VaR & Expected Shortfall (Highest Tail Risk)", color="#f8fafc", fontsize=11, pad=8)
-    ax_v.tick_params(colors="#cbd5e1", labelsize=8, axis="y")
-    ax_v.grid(axis="y", color="#334155", linestyle="--", alpha=0.6)
-
-    # Panel 2: Sector HHI Concentration
-    ax_h = fig2.add_axes([0.56, 0.54, 0.40, 0.34], facecolor="#1e293b")
-    if not df_hhi.empty:
-        h_top = df_hhi.sort_values("hhi_score", ascending=True).tail(10)
-        ax_h.barh([s[:24] for s in h_top["scheme_name"]], h_top["hhi_score"], color="#a855f7")
-        ax_h.axvline(2500, color="#f43f5e", linestyle="--", linewidth=1.2, label="High Concentration (>2500)")
-        ax_h.legend(facecolor="#0f172a", edgecolor="#334155", labelcolor="#f8fafc", fontsize=8)
-    ax_h.set_title("Top 10 Concentrated Equity Funds (Sector HHI)", color="#f8fafc", fontsize=11, pad=8)
-    ax_h.tick_params(colors="#cbd5e1", labelsize=8)
-    ax_h.grid(axis="x", color="#334155", linestyle="--", alpha=0.6)
-
-    # Panel 3: Risk-Return Scatter (Volatility vs 3Y Return)
-    ax_s = fig2.add_axes([0.07, 0.09, 0.42, 0.34], facecolor="#1e293b")
-    cats = df_perf["category"].unique()
-    palette = ["#38bdf8", "#10b981", "#f59e0b", "#f43f5e", "#a855f7"]
-    for idx, cat in enumerate(cats):
-        sub = df_perf[df_perf["category"] == cat]
-        ax_s.scatter(sub["std_dev_ann_pct"], sub["return_3yr_pct"],
-                     s=sub["aum_crore"] / 250 + 30, alpha=0.8,
-                     color=palette[idx % len(palette)], label=cat)
-    ax_s.set_xlabel("Annualized Volatility (%)", color="#cbd5e1", fontsize=9)
-    ax_s.set_ylabel("3-Year CAGR (%)", color="#cbd5e1", fontsize=9)
-    ax_s.set_title("Risk-Return Frontier Across 40 Schemes (Bubble = AUM)", color="#f8fafc", fontsize=11, pad=8)
-    ax_s.tick_params(colors="#cbd5e1", labelsize=8)
-    ax_s.legend(facecolor="#0f172a", edgecolor="#334155", labelcolor="#f8fafc", fontsize=7.5)
-    ax_s.grid(color="#334155", linestyle="--", alpha=0.6)
-
-    # Panel 4: Recommender Top Picks Table Card
-    ax_t = fig2.add_axes([0.56, 0.09, 0.40, 0.34], facecolor="#1e293b")
-    ax_t.set_xticks([]); ax_t.set_yticks([])
-    for spine in ax_t.spines.values():
-        spine.set_edgecolor("#334155")
-    ax_t.text(0.03, 0.90, "RECOMMENDATION ENGINE — TOP PICKS BY RISK PROFILE",
-              fontsize=10.5, fontweight="bold", color="#38bdf8")
-
-    recs = [
-        ("LOW RISK", "ICICI Pru Liquid Fund", "Sharpe: 7.68  |  3Y: 7.68%  |  Exp: 0.74%", "#10b981"),
-        ("MODERATE", "Parag Parikh Flexi Cap", "Sharpe: 1.12  |  3Y: 16.42% |  Exp: 0.82%", "#38bdf8"),
-        ("HIGH RISK", "Kotak Emerging Equity", "Sharpe: 0.96  |  3Y: 18.23% |  Exp: 1.56%", "#f59e0b"),
-        ("HIGH RISK", "SBI Small Cap Fund", "Sharpe: 0.94  |  3Y: 23.39% |  Exp: 1.43%", "#f43f5e"),
-    ]
-    for idx, (tag, name, stats, col) in enumerate(recs):
-        y0 = 0.70 - idx * 0.19
-        ax_t.text(0.04, y0 + 0.06, tag, fontsize=8, fontweight="bold", color=col)
-        ax_t.text(0.24, y0 + 0.06, name, fontsize=9.5, fontweight="bold", color="#f8fafc")
-        ax_t.text(0.24, y0 - 0.02, stats, fontsize=8, color="#cbd5e1")
-
-    fig2.savefig(FIG_DIR / "dashboard_analytics.png", dpi=150, facecolor="#0f172a")
-    plt.close(fig2)
-    logger.info("Saved dashboard_analytics.png")
-
-
 def main() -> None:
-    """Executes dashboard HTML generation and screenshot rendering."""
+    """Executes interactive HTML dashboard generation."""
     data = fetch_dashboard_data()
     generate_html_dashboard(data)
-    render_dashboard_screenshots(data)
 
 
 if __name__ == "__main__":

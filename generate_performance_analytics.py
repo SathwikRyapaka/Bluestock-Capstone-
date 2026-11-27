@@ -95,18 +95,15 @@ def compute_daily_returns(df_nav: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_cagr(nav_series: pd.Series, years: float) -> float:
-    """Computes CAGR = (NAV_end / NAV_start) ^ (1 / n) - 1 over a lookback horizon."""
+    """Computes CAGR = (NAV_end / NAV_start) ^ (252 / n_trading_days) - 1 over a lookback horizon."""
     if len(nav_series) < 2:
         return np.nan
-    end_date = nav_series.index.max()
-    target_start = end_date - pd.DateOffset(days=int(round(years * 365.25)))
-    sub = nav_series[nav_series.index >= target_start]
-    if len(sub) < 2:
+    target_days = int(round(years * TRADING_DAYS))
+    sub = nav_series.tail(target_days + 1) if len(nav_series) > target_days else nav_series
+    n_trading_days = len(sub) - 1
+    if n_trading_days <= 0 or sub.iloc[0] <= 0:
         return np.nan
-    actual_years = (sub.index.max() - sub.index.min()).days / 365.25
-    if actual_years <= 0:
-        return np.nan
-    return float((sub.iloc[-1] / sub.iloc[0]) ** (1.0 / actual_years) - 1.0)
+    return float((sub.iloc[-1] / sub.iloc[0]) ** (TRADING_DAYS / float(n_trading_days)) - 1.0)
 
 
 def compute_performance_metrics(
@@ -130,11 +127,11 @@ def compute_performance_metrics(
         nav = grp["nav"]
         ret = grp["daily_return"].dropna()
 
-        # 1. CAGR (1Y, 3Y, Full ~4.4Y / 5Y proxy)
+        # 1. CAGR (1Y, 3Y, Full ~4.4Y / 5Y proxy) using 252 / n_trading_days
         cagr_1y = compute_cagr(nav, 1.0) * 100
         cagr_3y = compute_cagr(nav, 3.0) * 100
-        full_years = (nav.index.max() - nav.index.min()).days / 365.25
-        cagr_full = float((nav.iloc[-1] / nav.iloc[0]) ** (1.0 / full_years) - 1.0) * 100
+        n_full_days = max(len(nav) - 1, 1)
+        cagr_full = float((nav.iloc[-1] / nav.iloc[0]) ** (TRADING_DAYS / float(n_full_days)) - 1.0) * 100
         reported_5y = perf_5yr_map.get(code, np.nan)
 
         # 2. Sharpe & Sortino (Rf = 6.5%)

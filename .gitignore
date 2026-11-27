@@ -30,10 +30,9 @@ venv.bak/
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
 
-# Database files (>100MB as specified in capstone rules)
+# Database files (share schema.sql instead of committing .db binaries)
 *.db
 *.sqlite3
-!bluestock_mf.db
 
 # OS generated files
 .DS_Store
