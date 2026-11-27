@@ -35,6 +35,7 @@ DB_PATH = BASE_DIR / "bluestock_mf.db"
 REPORTS_DIR = BASE_DIR / "reports"
 
 def get_connection():
+    """Opens and returns a SQLite database connection."""
     return sqlite3.connect(DB_PATH)
 
 def compute_var_cvar() -> pd.DataFrame:
@@ -353,6 +354,7 @@ def compute_sector_hhi() -> pd.DataFrame:
     return df_hhi
 
 def run_all():
+    """Executes all Day 6 advanced analytics and risk metric computations."""
     print("\n" + "="*80)
     print("RUNNING ADVANCED ANALYTICS & RISK METRICS PIPELINE")
     print("="*80)

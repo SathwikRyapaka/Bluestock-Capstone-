@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bluestock Fintech — Mutual Fund Analytics Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 20px 28px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px;
+    }
+    header h1 { font-size: 22px; color: var(--accent); }
+    header p { font-size: 13px; color: var(--muted); }
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 22px;
+    }
+    .kpi-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px;
+    }
+    .kpi-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+    .kpi-value { font-size: 26px; font-weight: 700; margin-top: 6px; color: var(--text); }
+    .kpi-sub { font-size: 12px; color: var(--green); margin-top: 4px; }
+    .chart-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-bottom: 22px;
+    }
+    .chart-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+    }
+    .chart-card h3 { font-size: 15px; margin-bottom: 10px; color: #e2e8f0; }
+    .table-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; overflow-x: auto;
+    }
+    .table-card h3 { font-size: 16px; margin-bottom: 12px; color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; }
+    tr:hover { background: rgba(56, 189, 248, 0.08); }
+    footer { text-align: center; margin-top: 24px; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Bluestock Fintech — Mutual Fund Analytics Platform</h1>
+      <p>Interactive Star-Schema BI Dashboard | 40 Schemes | 46,000 NAV Records | 32,778 Transactions</p>
+    </div>
+    <div style="text-align:right">
+      <span style="background:#0ea5e9;color:#fff;padding:5px 12px;border-radius:14px;font-size:12px;font-weight:600;">v1.0 Production</span>
+    </div>
+  </header>
+
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Industry AUM (2025)</div>
+      <div class="kpi-value">&#8377;62.74L Cr</div>
+      <div class="kpi-sub">SBI MF leads at &#8377;12.50L Cr (19.9%)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Latest Monthly SIP Inflow</div>
+      <div class="kpi-value">&#8377;31,002 Cr</div>
+      <div class="kpi-sub">+169% growth since Jan 2022</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Industry Folios</div>
+      <div class="kpi-value">26.12 Cr</div>
+      <div class="kpi-sub">Nearly doubled from 13.26 Cr</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tracked Retail Volume</div>
+      <div class="kpi-value">&#8377;352.2 Cr</div>
+      <div class="kpi-sub">32,778 verified transactions</div>
+    </div>
+  </section>
+
+  <section class="chart-grid">
+    <div class="chart-card">
+      <h3>AMC AUM Leadership (2025, &#8377; Lakh Crore)</h3>
+      <div id="chart-aum" style="height:310px;"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Monthly SIP Inflow Trajectory (&#8377; Crore)</h3>
+      <div id="chart-sip" style="height:310px;"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Top 10 States by Retail Volume (&#8377; Crore)</h3>
+      <div id="chart-state" style="height:310px;"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Equity Sector Allocation (%)</h3>
+      <div id="chart-sector" style="height:310px;"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Industry Folio Growth (Crore Accounts)</h3>
+      <div id="chart-folio" style="height:310px;"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Tail Risk: 95% Historical VaR vs CVaR (%)</h3>
+      <div id="chart-var" style="height:310px;"></div>
+    </div>
+  </section>
+
+  <section class="table-card">
+    <h3>Top 10 Schemes by Risk-Adjusted Return (Sharpe Ratio)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Scheme Name</th><th>Fund House</th><th>Category</th><th>Risk Grade</th>
+          <th>Sharpe</th><th>3Y Return</th><th>Expense Ratio</th><th>AUM</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>ICICI Pru Liquid Fund - Regular - Growth</td><td>ICICI Prudential MF</td><td>Liquid</td><td>Low</td><td><b>7.68</b></td><td>7.68%</td><td>0.74%</td><td>&#8377;39,116 Cr</td></tr>
+<tr><td>Kotak Liquid Fund - Regular - Growth</td><td>Kotak Mahindra MF</td><td>Liquid</td><td>Low</td><td><b>6.18</b></td><td>6.18%</td><td>0.60%</td><td>&#8377;27,623 Cr</td></tr>
+<tr><td>ABSL Liquid Fund - Regular - Growth</td><td>Aditya Birla Sun Life MF</td><td>Liquid</td><td>Low</td><td><b>5.14</b></td><td>5.14%</td><td>0.79%</td><td>&#8377;38,995 Cr</td></tr>
+<tr><td>HDFC Short Term Debt Fund - Regular - Growth</td><td>HDFC Mutual Fund</td><td>Short Duration</td><td>Low</td><td><b>1.84</b></td><td>7.37%</td><td>0.56%</td><td>&#8377;27,953 Cr</td></tr>
+<tr><td>SBI Magnum Gilt Fund - Regular Plan - Growth</td><td>SBI Mutual Fund</td><td>Gilt</td><td>Low</td><td><b>1.52</b></td><td>6.07%</td><td>0.77%</td><td>&#8377;24,101 Cr</td></tr>
+<tr><td>Nippon India Gilt Securities Fund - Regular - Growth</td><td>Nippon India MF</td><td>Gilt</td><td>Low</td><td><b>1.33</b></td><td>5.31%</td><td>0.55%</td><td>&#8377;30,030 Cr</td></tr>
+<tr><td>HDFC Top 100 Fund - Regular Plan - Growth</td><td>HDFC Mutual Fund</td><td>Large Cap</td><td>Moderate</td><td><b>1.06</b></td><td>14.84%</td><td>1.55%</td><td>&#8377;6,434 Cr</td></tr>
+<tr><td>Mirae Asset Large Cap Fund - Regular - Growth</td><td>Mirae Asset MF</td><td>Large Cap</td><td>Moderate</td><td><b>1.06</b></td><td>14.81%</td><td>1.46%</td><td>&#8377;11,361 Cr</td></tr>
+<tr><td>ICICI Pru Bluechip Fund - Direct - Growth</td><td>ICICI Prudential MF</td><td>Large Cap</td><td>Moderate</td><td><b>1.03</b></td><td>14.41%</td><td>0.80%</td><td>&#8377;41,553 Cr</td></tr>
+<tr><td>Nippon India Large Cap Fund - Regular - Growth</td><td>Nippon India MF</td><td>Large Cap</td><td>Moderate</td><td><b>1.00</b></td><td>14.00%</td><td>1.51%</td><td>&#8377;20,909 Cr</td></tr>
+
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    Bluestock Fintech Capstone Project (2026) | Team: Sathwik Ryapaka, Abhiram, Ashmeet Kaur
+  </footer>
+
+  <script>
+    const darkLayout = {
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#cbd5e1', size: 11 },
+      margin: { t: 15, r: 20, b: 45, l: 55 },
+      xaxis: { gridcolor: '#334155' },
+      yaxis: { gridcolor: '#334155' }
+    };
+
+    Plotly.newPlot('chart-aum', [{
+      x: ["SBI Mutual Fund", "ICICI Prudential MF", "HDFC Mutual Fund", "Nippon India MF", "Kotak Mahindra MF", "Aditya Birla Sun Life MF", "UTI Mutual Fund", "Axis Mutual Fund", "Mirae Asset MF", "DSP Mutual Fund"],
+      y: [12.5, 10.74, 9.3, 7.0, 5.8, 4.6, 4.1, 3.5, 2.9, 2.3],
+      type: 'bar',
+      marker: { color: '#38bdf8' }
+    }], { ...darkLayout, xaxis: { ...darkLayout.xaxis, tickangle: -25 } }, { responsive: true });
+
+    Plotly.newPlot('chart-sip', [{
+      x: ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12"],
+      y: [11517.0, 11438.0, 12328.0, 11863.0, 12286.0, 12276.0, 12140.0, 12694.0, 12976.0, 13040.0, 13306.0, 13573.0, 13856.0, 13687.0, 14276.0, 14749.0, 14749.0, 14734.0, 15245.0, 15814.0, 16042.0, 16928.0, 17073.0, 17610.0, 18838.0, 19187.0, 20371.0, 20371.0, 21262.0, 21262.0, 23332.0, 23547.0, 24509.0, 25323.0, 25320.0, 26459.0, 26400.0, 25999.0, 25926.0, 26632.0, 26688.0, 27274.0, 28464.0, 28265.0, 29361.0, 29529.0, 30200.0, 31002.0],
+      type: 'scatter', mode: 'lines', fill: 'tozeroy',
+      line: { color: '#10b981', width: 2.5 }
+    }], darkLayout, { responsive: true });
+
+    Plotly.newPlot('chart-state', [{
+      y: ["Haryana", "Uttar Pradesh", "Delhi", "Telangana", "West Bengal", "Gujarat", "Rajasthan", "Madhya Pradesh", "Tamil Nadu", "Punjab"],
+      x: [27.96, 28.54, 28.96, 29.02, 29.72, 29.84, 29.86, 30.83, 31.52, 31.58],
+      type: 'bar', orientation: 'h',
+      marker: { color: '#f59e0b' }
+    }], { ...darkLayout, margin: { t: 15, r: 20, b: 40, l: 110 } }, { responsive: true });
+
+    Plotly.newPlot('chart-sector', [{
+      labels: ["Banking", "IT", "Pharma", "Automobile", "Utilities", "FMCG", "Infrastructure", "Diversified"],
+      values: [652.26, 455.47, 407.45, 323.65, 265.54, 229.11, 192.16, 169.23],
+      type: 'pie', hole: 0.45
+    }], { ...darkLayout, margin: { t: 10, r: 10, b: 10, l: 10 } }, { responsive: true });
+
+    Plotly.newPlot('chart-folio', [{
+      x: ["2022-01", "2022-04", "2022-07", "2022-10", "2023-01", "2023-04", "2023-07", "2023-10", "2024-01", "2024-04", "2024-07", "2024-10", "2024-12", "2025-01", "2025-03", "2025-04", "2025-07", "2025-08", "2025-09", "2025-10", "2025-12"],
+      y: [13.26, 13.91, 13.85, 14.12, 14.81, 15.54, 16.28, 16.72, 17.78, 18.85, 19.98, 21.62, 22.89, 23.1, 23.45, 23.89, 24.57, 24.89, 25.19, 25.6, 26.12],
+      type: 'scatter', mode: 'lines+markers',
+      line: { color: '#a855f7', width: 2.5 }
+    }], darkLayout, { responsive: true });
+
+    Plotly.newPlot('chart-var', [
+      { x: ["SBI Small Cap Fund - Direct ", "Axis Small Cap Fund - Regula", "ABSL Small Cap Fund - Regula", "Nippon India Small Cap Fund ", "SBI Small Cap Fund - Regular", "DSP Small Cap Fund - Regular", "UTI Mid Cap Fund - Regular -", "HDFC Mid-Cap Opportunities F", "ICICI Pru Midcap Fund - Regu", "Axis Midcap Fund - Regular -", "HDFC Mid-Cap Opportunities F", "Kotak Emerging Equity Fund -", "DSP Midcap Fund - Regular - ", "Mirae Asset Tax Saver Fund -", "UTI Flexi Cap Fund - Regular"], y: [-2.69, -2.62, -2.6, -2.54, -2.45, -2.35, -1.92, -1.9, -1.89, -1.85, -1.84, -1.82, -1.79, -1.71, -1.52], name: 'VaR (95%)', type: 'bar', marker: { color: '#f59e0b' } },
+      { x: ["SBI Small Cap Fund - Direct ", "Axis Small Cap Fund - Regula", "ABSL Small Cap Fund - Regula", "Nippon India Small Cap Fund ", "SBI Small Cap Fund - Regular", "DSP Small Cap Fund - Regular", "UTI Mid Cap Fund - Regular -", "HDFC Mid-Cap Opportunities F", "ICICI Pru Midcap Fund - Regu", "Axis Midcap Fund - Regular -", "HDFC Mid-Cap Opportunities F", "Kotak Emerging Equity Fund -", "DSP Midcap Fund - Regular - ", "Mirae Asset Tax Saver Fund -", "UTI Flexi Cap Fund - Regular"], y: [-3.24, -3.17, -3.25, -3.23, -3.06, -3.1, -2.33, -2.35, -2.43, -2.43, -2.31, -2.27, -2.26, -2.13, -1.94], name: 'CVaR (95%)', type: 'bar', marker: { color: '#f43f5e' } }
+    ], { ...darkLayout, barmode: 'group', xaxis: { ...darkLayout.xaxis, tickangle: -35 } }, { responsive: true });
+  </script>
+</body>
+</html>

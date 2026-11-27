@@ -145,6 +145,7 @@ def display_recommendations(df_rec: pd.DataFrame, risk_appetite: str):
     print("="*110 + "\n")
 
 def main():
+    """Parses CLI arguments or prompts interactively to display top mutual fund recommendations."""
     parser = argparse.ArgumentParser(description="Bluestock Mutual Fund Recommender")
     parser.add_argument(
         "--risk",

@@ -337,6 +337,7 @@ def generate_data_quality_report(
     print(f"\n[✓] Data Quality Summary saved to: {report_file}")
 
 def main():
+    """Executes Day 1 data ingestion, anomaly inspection, AMFI validation, and quality report generation."""
     dfs = load_all_datasets()
     anomalies = inspect_datasets(dfs)
     fm_stats = explore_fund_master(dfs["fund_master"])

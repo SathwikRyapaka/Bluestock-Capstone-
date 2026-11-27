@@ -57,9 +57,11 @@ plt.rcParams["axes.edgecolor"] = "#cccccc"
 plt.rcParams["axes.linewidth"] = 0.8
 
 def get_connection():
+    """Opens and returns a SQLite database connection."""
     return sqlite3.connect(DB_PATH)
 
 def save_fig(fig, filename):
+    """Saves a Matplotlib figure to both reports/figures/ and reports/."""
     p1 = FIG_DIR / filename
     p2 = REPORTS_DIR / filename
     fig.savefig(p1, dpi=150, bbox_inches="tight")
@@ -71,6 +73,7 @@ def save_fig(fig, filename):
 # 1. NAV TRENDS & MARKET REGIMES
 # -----------------------------------------------------------------------------
 def plot_nav_trends():
+    """Generates Charts 1 and 2: Daily NAV trends and sub-category cumulative growth."""
     logger.info("Plotting Chart 1: NAV Trends & Market Regimes...")
     conn = get_connection()
     df_nav = pd.read_sql_query("""
@@ -139,6 +142,7 @@ def plot_nav_trends():
 # 2. AUM GROWTH & AMC LEADERSHIP
 # -----------------------------------------------------------------------------
 def plot_aum_growth():
+    """Generates Charts 3 and 4: AMC AUM growth grouped bar chart and market share pie."""
     logger.info("Plotting Chart 3: AUM Growth by AMC...")
     conn = get_connection()
     df_aum = pd.read_sql_query("""
@@ -193,6 +197,7 @@ def plot_aum_growth():
 # 3. SIP INFLOW TRAJECTORY & RECORD MILESTONES
 # -----------------------------------------------------------------------------
 def plot_sip_inflows():
+    """Generates Charts 5 and 6: Monthly SIP inflow trend and YoY growth trajectory."""
     logger.info("Plotting Chart 5: SIP Inflows & Record Milestones...")
     conn = get_connection()
     df_sip = pd.read_sql_query("""
@@ -259,6 +264,7 @@ def plot_sip_inflows():
 # 4. CATEGORY INFLOW HEATMAP
 # -----------------------------------------------------------------------------
 def plot_category_heatmap():
+    """Generates Chart 7: Category-wise monthly net mutual fund inflow heatmap."""
     logger.info("Plotting Chart 7: Category Inflow Heatmap...")
     conn = get_connection()
     df_cat = pd.read_sql_query("""
@@ -282,6 +288,7 @@ def plot_category_heatmap():
 # 5. INVESTOR DEMOGRAPHICS & GEOGRAPHY
 # -----------------------------------------------------------------------------
 def plot_investor_demographics():
+    """Generates Charts 8–12: Age, SIP boxplot, gender/income, state inflows, and T30/B30 split."""
     logger.info("Plotting Charts 8-12: Investor Demographics & Geography...")
     conn = get_connection()
     df_tx = pd.read_sql_query("""
@@ -350,6 +357,7 @@ def plot_investor_demographics():
 # 6. FOLIO EXPANSION, CORRELATION & SECTOR HOLDINGS
 # -----------------------------------------------------------------------------
 def plot_folios_correlation_and_holdings():
+    """Generates Charts 13–16: Industry folio growth, return correlation matrix, sector donut, and top stocks."""
     logger.info("Plotting Charts 13-16: Folios, Correlation & Sector Holdings...")
     conn = get_connection()
 
@@ -442,6 +450,7 @@ def plot_folios_correlation_and_holdings():
     save_fig(fig16, "16_top_equity_stock_holdings.png")
 
 def main():
+    """Executes all 16 EDA chart generation routines."""
     print("\n" + "="*80)
     print("RUNNING EXPLORATORY DATA ANALYSIS (EDA) CHART ENGINE")
     print("="*80)

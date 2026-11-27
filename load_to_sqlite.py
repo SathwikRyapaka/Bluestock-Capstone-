@@ -46,6 +46,7 @@ def generate_dim_date(start_date: str = "2020-01-01", end_date: str = "2026-12-3
     
     # Indian Fiscal Year (April 1 to March 31)
     def get_fiscal_year(dt):
+        """Maps a timestamp to its Indian fiscal year label (e.g., FY2024-25)."""
         year = dt.year
         if dt.month >= 4:
             return f"FY{year}-{str(year+1)[-2:]}"
@@ -53,6 +54,7 @@ def generate_dim_date(start_date: str = "2020-01-01", end_date: str = "2026-12-3
             return f"FY{year-1}-{str(year)[-2:]}"
             
     def get_fiscal_quarter(dt):
+        """Maps a timestamp to its Indian fiscal quarter (Q1–Q4)."""
         m = dt.month
         if m in [4, 5, 6]:
             return "Q1"
