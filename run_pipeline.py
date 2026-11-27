@@ -67,9 +67,10 @@ def main() -> None:
         ("3. Data Cleaning & Standardization", [py, "data_cleaning.py"]),
         ("4. SQLite Star Schema Warehouse Load", [py, "load_to_sqlite.py"]),
         ("5. EDA Visualization Suite (16 Charts)", [py, "generate_eda_charts.py"]),
-        ("6. Advanced Risk & Cohort Analytics", [py, "generate_advanced_analytics.py"]),
-        ("7. Interactive BI Dashboard & Previews", [py, "dashboard/generate_dashboard.py"]),
-        ("8. Mutual Fund Recommender Check", [py, "recommender.py", "--risk", "Moderate", "--top", "3"]),
+        ("6. Quantitative Performance & Benchmark Attribution", [py, "generate_performance_analytics.py"]),
+        ("7. Advanced Risk & Cohort Analytics", [py, "generate_advanced_analytics.py"]),
+        ("8. Interactive BI Dashboard & Previews", [py, "dashboard/generate_dashboard.py"]),
+        ("9. Mutual Fund Recommender Check", [py, "recommender.py", "--risk", "Moderate", "--top", "3"]),
     ])
 
     total_start = time.perf_counter()
